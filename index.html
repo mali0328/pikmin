@@ -180,7 +180,7 @@
     <!-- Core Script -->
     <script>
         // 內建測試範例數據 (9個點)
-        const SAMPLE_COORDS = '';
+        const SAMPLE_COORDS = ``;
 
         // 地球半徑 (公尺)
         const EARTH_RADIUS = 6371000;
@@ -211,7 +211,7 @@
                 handleCalculation(currentMode); // 載入範例後直接重新計算一次
             });
 
-            // 花朵名稱變更時即時重新渲染與輸出 JSON
+            // 關鍵修正：花朵名稱變更時即時重新渲染與輸出 JSON
             flowerNameInput.addEventListener('input', () => {
                 handleCalculation(currentMode);
             });
@@ -357,6 +357,7 @@
 
             try {
                 let orderedPoints = [];
+                let flowerCenters = null;
                 const t0 = performance.now();
                 
                 if (mode === 'shortest') {
@@ -366,14 +367,20 @@
                     // 原始順序
                     orderedPoints = points.map(p => ({ ...p }));
                 } else if (mode === 'flower') {
-                    // 種花路徑模式
-                    const startPoint = getDestinationPoint(points[0].lat, points[0].lng, 90, 0);
+                    // 種花路徑模式：
+                    // A. 先將輸入中心座標點以「最短路徑 (TSP)」排序，確保大圓之間的連接順序最佳
+                    const bestRouteIndex = solveTSP(points);
+                    flowerCenters = bestRouteIndex.map(idx => points[idx]);
+
+                    // B. 建立唯一的起始座標（在排序後第一個點的正北方 90M 作為安全緩衝區）
+                    const startPoint = getDestinationPoint(flowerCenters[0].lat, flowerCenters[0].lng, 90, 0);
                     orderedPoints.push(startPoint);
 
                     let lastPoint = startPoint;
 
-                    for (let i = 0; i < points.length; i++) {
-                        const center = points[i];
+                    // C. 依排序後的中心點順序逐一產生包圍正八邊形（使用固定 30M 半徑）
+                    for (let i = 0; i < flowerCenters.length; i++) {
+                        const center = flowerCenters[i];
                         const circlePoints = [];
                         
                         for (let angle = 0; angle < 360; angle += 45) {
@@ -420,7 +427,7 @@
                 document.getElementById('stat-distance').textContent = `${totalDistance.toFixed(2)} 公尺`;
 
                 // 3. 渲染 SVG 可視化地圖
-                renderVisualizer(orderedPoints, mode === 'flower' ? points : null, flowerConfig.radius);
+                renderVisualizer(orderedPoints, mode === 'flower' ? flowerCenters : null, flowerConfig.radius);
 
                 // 4. 生成符合規格的 JSON
                 const exportJsonObj = generateMocPogoJson(orderedPoints, totalDistance, routeName);
