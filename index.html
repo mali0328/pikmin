@@ -56,8 +56,19 @@
                 
                 <p class="text-xs text-slate-500 -mt-2">每行輸入一組座標，格式為「緯度,經度」（例如：22.083493,-102.340414）。</p>
                 
-                <textarea id="coords-input" rows="10" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm resize-none bg-slate-50 focus:bg-white transition-all" placeholder="22.083493,-102.340414&#10;22.08578,-102.339054&#10;22.085639,-102.340502"></textarea>
+                <textarea id="coords-input" rows="8" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm resize-none bg-slate-50 focus:bg-white transition-all" placeholder="22.083493,-102.340414&#10;22.08578,-102.339054&#10;22.085639,-102.340502"></textarea>
                 
+                <!-- 簡化後的種花名稱輸入欄位 -->
+                <div class="bg-emerald-50/50 p-4 rounded-lg border border-emerald-150 flex flex-col gap-2">
+                    <label for="flower-name" class="text-xs font-bold text-emerald-850 flex items-center gap-1.5">
+                        <svg class="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+                        </svg>
+                        🌸 花朵 / 路徑名稱 (將寫入歷史紀錄名稱)
+                    </label>
+                    <input id="flower-name" type="text" value="一般大花" placeholder="例如：一般大花、黃色玫瑰" class="w-full p-2 bg-white border border-slate-300 rounded-md text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 focus:outline-none">
+                </div>
+
                 <!-- 按鈕操作區 -->
                 <div class="flex flex-col gap-2.5">
                     <button id="btn-calculate" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md shadow-indigo-100">
@@ -71,7 +82,7 @@
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
                         </svg>
-                        生成「種花路徑」 (90M 緩衝 + 30M 包圍圈)
+                        生成「種花路徑」 (90M 緩衝 + 包圍圈)
                     </button>
                     
                     <button id="btn-original-order" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-lg border border-slate-300 transition-colors flex items-center justify-center gap-2">
@@ -185,6 +196,9 @@
         // 全域儲存最後生成的 JSON 字串
         let lastGeneratedJson = "{}";
 
+        // 當前計算模式與參數
+        let currentMode = "shortest";
+
         // 初始化與綁定事件
         window.addEventListener('DOMContentLoaded', () => {
             const btnLoadSample = document.getElementById('btn-load-sample');
@@ -194,6 +208,7 @@
             const btnCopy = document.getElementById('btn-copy');
             const btnDownload = document.getElementById('btn-download');
             const coordsInput = document.getElementById('coords-input');
+            const flowerNameInput = document.getElementById('flower-name');
 
             // 預載入範例
             coordsInput.value = SAMPLE_COORDS;
@@ -201,6 +216,12 @@
             btnLoadSample.addEventListener('click', () => {
                 coordsInput.value = SAMPLE_COORDS;
                 showToast("已成功載入 9 點測試範例！", "success");
+                handleCalculation(currentMode); // 載入範例後直接重新計算一次
+            });
+
+            // 花朵名稱變更時即時重新渲染與輸出 JSON
+            flowerNameInput.addEventListener('input', () => {
+                handleCalculation(currentMode);
             });
 
             // 點擊：計算最短路徑
@@ -277,6 +298,19 @@
             };
         }
 
+        // 取得當前種花設定的名稱與固定半徑
+        function getFlowerConfig() {
+            const nameInput = document.getElementById('flower-name').value.trim();
+            let defaultName = "優化最短路徑";
+            if (currentMode === 'original') defaultName = "原始順序路徑";
+            if (currentMode === 'flower') defaultName = "自訂路徑";
+
+            return {
+                radius: 30, // 固定 30M 半徑
+                name: nameInput || defaultName
+            };
+        }
+
         // 主要處理計算邏輯 (mode 可為 'shortest'、'original' 或 'flower')
         function handleCalculation(mode = 'shortest') {
             const inputText = document.getElementById('coords-input').value.trim();
@@ -284,6 +318,14 @@
                 showToast("請輸入座標點！", "error");
                 return;
             }
+
+            currentMode = mode;
+
+            // 取得種花配置
+            const flowerConfig = getFlowerConfig();
+
+            // 直接使用輸入框中的自訂路徑/花朵名稱作為 routeName
+            const routeName = flowerConfig.name;
 
             // 更新模式 Badge 狀態
             const badgeMode = document.getElementById('badge-mode');
@@ -294,7 +336,7 @@
                 badgeMode.textContent = "原始貼上順序";
                 badgeMode.className = "text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200";
             } else if (mode === 'flower') {
-                badgeMode.textContent = "種花路徑模式";
+                badgeMode.textContent = `種花模式 (${flowerConfig.name})`;
                 badgeMode.className = "text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200";
             }
 
@@ -306,7 +348,6 @@
                 const line = rawLines[i].trim();
                 if (!line) continue;
                 
-                // 相容多種分隔符，包含逗號、空白、分號
                 const parts = line.split(/[,\s;\t]+/);
                 if (parts.length >= 2) {
                     const lat = parseFloat(parts[0]);
@@ -322,104 +363,83 @@
                 return;
             }
 
-            showToast("正在規劃中...", "info");
+            try {
+                let orderedPoints = [];
+                const t0 = performance.now();
+                
+                if (mode === 'shortest') {
+                    const bestRouteIndex = solveTSP(points);
+                    orderedPoints = bestRouteIndex.map(idx => points[idx]);
+                } else if (mode === 'original') {
+                    // 原始順序
+                    orderedPoints = points.map(p => ({ ...p }));
+                } else if (mode === 'flower') {
+                    // 種花路徑模式
+                    const startPoint = getDestinationPoint(points[0].lat, points[0].lng, 90, 0);
+                    orderedPoints.push(startPoint);
 
-            // 讓瀏覽器有時間更新 UI，非同步執行
-            setTimeout(() => {
-                try {
-                    let orderedPoints = [];
-                    const t0 = performance.now();
-                    
-                    if (mode === 'shortest') {
-                        const bestRouteIndex = solveTSP(points);
-                        orderedPoints = bestRouteIndex.map(idx => points[idx]);
-                    } else if (mode === 'original') {
-                        // 原始順序：直接複製 points 陣列
-                        orderedPoints = points.map(p => ({ ...p }));
-                    } else if (mode === 'flower') {
-                        // 「種花路徑」模式：
-                        // A. 建立唯一的起始座標（在第 1 個原始座標正北方 90M 作為緩衝）
-                        const startPoint = getDestinationPoint(points[0].lat, points[0].lng, 90, 0);
-                        orderedPoints.push(startPoint);
+                    let lastPoint = startPoint;
 
-                        let lastPoint = startPoint;
-
-                        // B. 為每組座標各別產生一個順時針的八邊形環繞（半徑 30M，亦即直徑外圍 60M）
-                        for (let i = 0; i < points.length; i++) {
-                            const center = points[i];
-                            const circlePoints = [];
-                            
-                            // 1. 先產生 8 個順時針方向的種花座標點 (0, 45, 90, 135, 180, 225, 270, 315 度)
-                            for (let angle = 0; angle < 360; angle += 45) {
-                                const pt = getDestinationPoint(center.lat, center.lng, 30, angle);
-                                circlePoints.push(pt);
-                            }
-                            
-                            // 2. 尋找這 8 個點中，距離上一個路徑點 (lastPoint) 最近的點作為入口，以確保連線路徑最短
-                            let minDistance = Infinity;
-                            let nearestIdx = 0;
-                            for (let j = 0; j < 8; j++) {
-                                const dist = getHaversineDistance(lastPoint, circlePoints[j]);
-                                if (dist < minDistance) {
-                                    minDistance = dist;
-                                    nearestIdx = j;
-                                }
-                            }
-                            
-                            // 3. 重新安排這 8 個點的順序，使它們自 nearestIdx 點切入，並依順時針繞行一圈
-                            const sortedCirclePoints = [];
-                            for (let j = 0; j < 8; j++) {
-                                const idx = (nearestIdx + j) % 8;
-                                sortedCirclePoints.push({ ...circlePoints[idx] });
-                            }
-                            
-                            // 4. 將這 8 個座標點推入主路徑
-                            orderedPoints.push(...sortedCirclePoints);
-                            
-                            // 5. 再次推入這次環繞的第 1 個點（即 entry 點），以形成完美的閉合圓形環繞
-                            const closingPoint = { ...sortedCirclePoints[0] };
-                            orderedPoints.push(closingPoint);
-                            
-                            // 6. 更新 lastPoint，作為與下一個圓圈計算最短進入點的參考基準
-                            lastPoint = closingPoint;
+                    for (let i = 0; i < points.length; i++) {
+                        const center = points[i];
+                        const circlePoints = [];
+                        
+                        for (let angle = 0; angle < 360; angle += 45) {
+                            const pt = getDestinationPoint(center.lat, center.lng, flowerConfig.radius, angle);
+                            circlePoints.push(pt);
                         }
+                        
+                        let minDistance = Infinity;
+                        let nearestIdx = 0;
+                        for (let j = 0; j < 8; j++) {
+                            const dist = getHaversineDistance(lastPoint, circlePoints[j]);
+                            if (dist < minDistance) {
+                                minDistance = dist;
+                                nearestIdx = j;
+                            }
+                        }
+                        
+                        const sortedCirclePoints = [];
+                        for (let j = 0; j < 8; j++) {
+                            const idx = (nearestIdx + j) % 8;
+                            sortedCirclePoints.push({ ...circlePoints[idx] });
+                        }
+                        
+                        orderedPoints.push(...sortedCirclePoints);
+                        
+                        const closingPoint = { ...sortedCirclePoints[0] };
+                        orderedPoints.push(closingPoint);
+                        
+                        lastPoint = closingPoint;
                     }
-                    
-                    const t1 = performance.now();
-                    
-                    // 計算總路徑長度
-                    let totalDistance = 0;
-                    for (let i = 0; i < orderedPoints.length - 1; i++) {
-                        totalDistance += getHaversineDistance(orderedPoints[i], orderedPoints[i+1]);
-                    }
-
-                    // 2. 更新 UI 統計數據
-                    document.getElementById('stat-points').textContent = orderedPoints.length;
-                    document.getElementById('stat-start').textContent = `${orderedPoints[0].lat.toFixed(5)}, ${orderedPoints[0].lng.toFixed(5)}`;
-                    document.getElementById('stat-distance').textContent = `${totalDistance.toFixed(2)} 公尺`;
-
-                    // 3. 渲染 SVG 可視化地圖
-                    renderVisualizer(orderedPoints, mode === 'flower' ? points : null);
-
-                    // 4. 生成符合規格的 JSON
-                    const exportJsonObj = generateMocPogoJson(orderedPoints, totalDistance);
-                    lastGeneratedJson = JSON.stringify(exportJsonObj, null, 2);
-                    
-                    document.getElementById('json-output').textContent = lastGeneratedJson;
-
-                    const timeSpent = (t1 - t0).toFixed(1);
-                    if (mode === 'shortest') {
-                        showToast(`最短路徑計算成功！耗時 ${timeSpent} 毫秒。已優化最省時路線。`, "success");
-                    } else if (mode === 'original') {
-                        showToast(`已成功套用原始貼上順序！(共 ${orderedPoints.length} 個座標點)`, "success");
-                    } else if (mode === 'flower') {
-                        showToast(`「種花包圍路徑」生成成功！(含 90M 起點、自動最短入口與 30M 繞圈)`, "success");
-                    }
-                } catch (e) {
-                    console.error(e);
-                    showToast("規劃過程中發生錯誤，請檢查座標格式是否正確！", "error");
                 }
-            }, 50);
+                
+                const t1 = performance.now();
+                
+                // 計算總路徑長度
+                let totalDistance = 0;
+                for (let i = 0; i < orderedPoints.length - 1; i++) {
+                    totalDistance += getHaversineDistance(orderedPoints[i], orderedPoints[i+1]);
+                }
+
+                // 2. 更新 UI 統計數據
+                document.getElementById('stat-points').textContent = orderedPoints.length;
+                document.getElementById('stat-start').textContent = `${orderedPoints[0].lat.toFixed(5)}, ${orderedPoints[0].lng.toFixed(5)}`;
+                document.getElementById('stat-distance').textContent = `${totalDistance.toFixed(2)} 公尺`;
+
+                // 3. 渲染 SVG 可視化地圖
+                renderVisualizer(orderedPoints, mode === 'flower' ? points : null, flowerConfig.radius);
+
+                // 4. 生成符合規格的 JSON
+                const exportJsonObj = generateMocPogoJson(orderedPoints, totalDistance, routeName);
+                
+                lastGeneratedJson = JSON.stringify(exportJsonObj, null, 2);
+                document.getElementById('json-output').textContent = lastGeneratedJson;
+
+            } catch (e) {
+                console.error(e);
+                showToast("規劃過程中發生錯誤，請檢查座標格式是否正確！", "error");
+            }
         }
 
         // 計算兩點間的 Haversine 距離 (單位：公尺)
@@ -441,7 +461,6 @@
         function solveTSP(points) {
             const n = points.length;
             
-            // 計算距離矩陣
             const distMatrix = Array.from({ length: n }, () => new Array(n).fill(0));
             for (let i = 0; i < n; i++) {
                 for (let j = 0; j < n; j++) {
@@ -453,13 +472,12 @@
                 }
             }
 
-            // 如果數量不大於 10 點，採用 DFS 求絕對最優解 (精確演算法)
             if (n <= 10) {
                 let bestPath = [];
                 let minCost = Infinity;
 
                 function dfs(currentIdx, visited, currentPath, currentCost) {
-                    if (currentCost >= minCost) return; // 剪枝
+                    if (currentCost >= minCost) return; 
 
                     if (currentPath.length === n) {
                         if (currentCost < minCost) {
@@ -486,14 +504,10 @@
                 dfs(null, new Array(n).fill(false), [], 0);
                 return bestPath;
             } 
-            
-            // 如果數量大於 10 點，採用啟發式演算法 (以避面網頁卡死)
-            // 採用 Multi-Start Nearest Neighbor + 2-Opt 局部優化
             else {
                 let bestPath = [];
                 let minCost = Infinity;
 
-                // 試圖從每個不同的起點開始找鄰近路徑，保留最優那一個
                 for (let startIdx = 0; startIdx < n; startIdx++) {
                     const path = [startIdx];
                     const visited = new Array(n).fill(false);
@@ -525,16 +539,11 @@
                     }
                 }
 
-                // 套用 2-Opt (雙邊替換優化) 直到不再改善
                 let improved = true;
                 while (improved) {
                     improved = false;
                     for (let i = 1; i < n - 1; i++) {
                         for (let j = i + 1; j < n; j++) {
-                            // 計算若反轉中間這一段的差額
-                            // 對於開路(Open TSP)，反轉後的邊變化是:
-                            // 原本連接: (i-1 -> i) 和 (j -> j+1)
-                            // 替換為: (i-1 -> j) 和 (i -> j+1)
                             const currentDist1 = distMatrix[bestPath[i-1]][bestPath[i]];
                             const currentDist2 = (j + 1 < n) ? distMatrix[bestPath[j]][bestPath[j+1]] : 0;
                             
@@ -543,7 +552,6 @@
 
                             const diff = (newDist1 + newDist2) - (currentDist1 + currentDist2);
                             if (diff < -0.001) {
-                                // 執行翻轉
                                 reverseArraySegment(bestPath, i, j);
                                 improved = true;
                             }
@@ -576,27 +584,27 @@
         }
 
         // 製造 MocPOGO 格式的 JSON 對象
-        function generateMocPogoJson(orderedPoints, totalDistance) {
+        function generateMocPogoJson(orderedPoints, totalDistance, routeName) {
             const timestamp = (Date.now() / 1000);
             
             const startNode = {
-                "customName": "",
+                "customName": "", 
                 "uniqueID": generateUUID(),
                 "placeId": 0,
                 "lat": orderedPoints[0].lat,
                 "lng": orderedPoints[0].lng,
                 "createTime": timestamp,
-                "name": ""
+                "name": routeName 
             };
 
             const endNode = {
-                "customName": "",
+                "customName": "", 
                 "uniqueID": generateUUID(),
                 "placeId": 0,
                 "lat": orderedPoints[orderedPoints.length - 1].lat,
                 "lng": orderedPoints[orderedPoints.length - 1].lng,
                 "createTime": timestamp + 0.0000012,
-                "name": ""
+                "name": "" 
             };
 
             return {
@@ -616,7 +624,7 @@
                         "end": endNode,
                         "coordinates": orderedPoints.map(p => ({ "lat": p.lat, "lng": p.lng })),
                         "isCollect": false,
-                        "name": "",
+                        "name": "", 
                         "createTime": timestamp + 0.000005
                     }
                 ]
@@ -624,11 +632,10 @@
         }
 
         // 繪製路徑預覽圖 (SVG 技術投射)
-        function renderVisualizer(orderedPoints, flowerCenters = null) {
+        function renderVisualizer(orderedPoints, flowerCenters = null, flowerRadius = 30) {
             const container = document.getElementById('map-container');
-            container.innerHTML = ''; // 清空先前內容
+            container.innerHTML = ''; 
 
-            // 1. 計算邊界 (Bounding Box) - 包含可能存在的種花中心點
             let minLat = Infinity, maxLat = -Infinity;
             let minLng = Infinity, maxLng = -Infinity;
 
@@ -641,13 +648,11 @@
                 if (p.lng > maxLng) maxLng = p.lng;
             });
 
-            // 2. 避免單一點或者垂直、平行線導致除以零，進行微調補償
             let deltaLat = maxLat - minLat;
             let deltaLng = maxLng - minLng;
             if (deltaLat === 0) deltaLat = 0.001;
             if (deltaLng === 0) deltaLng = 0.001;
 
-            // 增加 18% 的縮放安全內邊距
             minLat -= deltaLat * 0.18;
             maxLat += deltaLat * 0.18;
             minLng -= deltaLng * 0.18;
@@ -656,18 +661,15 @@
             deltaLat = maxLat - minLat;
             deltaLng = maxLng - minLng;
 
-            // 3. 設定畫布尺寸
             const width = container.clientWidth || 500;
-            const height = 256; // 配合 h-64 高度
+            const height = 256; 
 
-            // 4. 定義座標投影轉換函數
             function project(lat, lng) {
                 const x = ((lng - minLng) / deltaLng) * width;
                 const y = (1 - (lat - minLat) / deltaLat) * height;
                 return { x, y };
             }
 
-            // 5. 建立 SVG 元件
             const svgNamespace = "http://www.w3.org/2000/svg";
             const svg = document.createElementNS(svgNamespace, "svg");
             svg.setAttribute("width", "100%");
@@ -675,7 +677,6 @@
             svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
             svg.classList.add("absolute", "top-0", "left-0", "w-full", "h-full");
 
-            // 定義箭頭 marker
             const defs = document.createElementNS(svgNamespace, "defs");
             const marker = document.createElementNS(svgNamespace, "marker");
             marker.setAttribute("id", "arrow");
@@ -688,18 +689,16 @@
             
             const markerPath = document.createElementNS(svgNamespace, "path");
             markerPath.setAttribute("d", "M 0 1 L 10 5 L 0 9 z");
-            markerPath.setAttribute("fill", flowerCenters ? "#10b981" : "#6366f1"); // 種花模式用綠色箭頭，其餘藍色
+            markerPath.setAttribute("fill", flowerCenters ? "#10b981" : "#6366f1"); 
             
             marker.appendChild(markerPath);
             defs.appendChild(marker);
             svg.appendChild(defs);
 
-            // 如果是種花路徑模式，先畫出黃色的原始座標中心點，以及其中心到圓點的標示
             if (flowerCenters) {
                 flowerCenters.forEach((center, idx) => {
                     const projCenter = project(center.lat, center.lng);
                     
-                    // 繪製中心點圓形 (亮黃色)
                     const centerCircle = document.createElementNS(svgNamespace, "circle");
                     centerCircle.setAttribute("cx", projCenter.x);
                     centerCircle.setAttribute("cy", projCenter.y);
@@ -709,7 +708,6 @@
                     centerCircle.setAttribute("stroke-width", "1.5");
                     svg.appendChild(centerCircle);
 
-                    // 中心點文字
                     const textCenter = document.createElementNS(svgNamespace, "text");
                     textCenter.setAttribute("x", projCenter.x);
                     textCenter.setAttribute("y", projCenter.y + 16);
@@ -720,25 +718,23 @@
                     textCenter.textContent = `中心點 ${idx + 1}`;
                     svg.appendChild(textCenter);
 
-                    // 繪製一個 30M 的淺黃色參考範圍虛線圈
                     const rangeCircle = document.createElementNS(svgNamespace, "circle");
                     rangeCircle.setAttribute("cx", projCenter.x);
                     rangeCircle.setAttribute("cy", projCenter.y);
                     
-                    // 使用垂直比例算大致半徑像素
-                    const edgeProj = project(center.lat + 0.00027, center.lng); // 30m 緯度差距約為 0.00027 度
+                    const latOffset = (flowerRadius / EARTH_RADIUS) * (180 / Math.PI);
+                    const edgeProj = project(center.lat + latOffset, center.lng);
                     const rPx = Math.abs(projCenter.y - edgeProj.y) || 25;
                     
                     rangeCircle.setAttribute("r", rPx);
                     rangeCircle.setAttribute("fill", "none");
-                    rangeCircle.setAttribute("stroke", "rgba(251, 191, 36, 0.15)");
-                    rangeCircle.setAttribute("stroke-width", "1");
+                    rangeCircle.setAttribute("stroke", "rgba(251, 191, 36, 0.18)");
+                    rangeCircle.setAttribute("stroke-width", "1.2");
                     rangeCircle.setAttribute("stroke-dasharray", "3, 3");
                     svg.appendChild(rangeCircle);
                 });
             }
 
-            // 6. 繪製連線路徑
             let pathD = "";
             orderedPoints.forEach((p, idx) => {
                 const proj = project(p.lat, p.lng);
@@ -758,7 +754,6 @@
             polyline.setAttribute("marker-mid", "url(#arrow)");
             svg.appendChild(polyline);
 
-            // 建立引導實線分段與方向頭
             for (let i = 0; i < orderedPoints.length - 1; i++) {
                 const pStart = project(orderedPoints[i].lat, orderedPoints[i].lng);
                 const pEnd = project(orderedPoints[i+1].lat, orderedPoints[i+1].lng);
@@ -774,13 +769,11 @@
                 svg.appendChild(segment);
             }
 
-            // 7. 繪製各個行經點
             orderedPoints.forEach((p, idx) => {
                 const proj = project(p.lat, p.lng);
                 const isStart = idx === 0;
                 const isEnd = idx === orderedPoints.length - 1;
 
-                // 起訖點外光暈
                 if (isStart || isEnd) {
                     const glowCircle = document.createElementNS(svgNamespace, "circle");
                     glowCircle.setAttribute("cx", proj.x);
@@ -790,22 +783,20 @@
                     svg.appendChild(glowCircle);
                 }
 
-                // 核心節點圓圈
                 const circle = document.createElementNS(svgNamespace, "circle");
                 circle.setAttribute("cx", proj.x);
                 circle.setAttribute("cy", proj.y);
                 circle.setAttribute("r", (isStart || isEnd) ? "6" : "3.5");
                 
-                let color = "#cbd5e1"; // 中間節點預設淺灰色
-                if (isStart) color = "#10b981"; // 起點綠色
-                if (isEnd) color = "#ef4444"; // 終點紅色
+                let color = "#cbd5e1"; 
+                if (isStart) color = "#10b981"; 
+                if (isEnd) color = "#ef4444"; 
                 
                 circle.setAttribute("fill", color);
                 circle.setAttribute("stroke", "#0f172a");
                 circle.setAttribute("stroke-width", "1.5");
                 svg.appendChild(circle);
 
-                // 只針對重點、起終點或特定點標註文字，避免畫面過於擁擠
                 if (isStart || isEnd || orderedPoints.length <= 15 || idx % 2 === 0) {
                     const text = document.createElementNS(svgNamespace, "text");
                     text.setAttribute("x", proj.x);
@@ -848,19 +839,34 @@
             }
         }
 
-        // 下載 .history 檔案
+        // 下載 .history 檔案 (關鍵更新：使用 application/octet-stream 強制 iOS 保持 .history 檔名)
         function downloadJsonFile(text) {
             try {
-                const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+                // 1. 取得自訂路徑名稱 (若為空則採預設名稱)
+                const config = getFlowerConfig();
+                const fileNamePrefix = config.name;
+
+                // 2. 獲取當下的本地端日期並轉為 YYYYMMDD
+                const d = new Date();
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const date = String(d.getDate()).padStart(2, '0');
+                const dateStr = `${year}${month}${date}`;
+
+                // 3. 組合檔名
+                const fullFileName = `${fileNamePrefix}_${dateStr}.history`;
+
+                // 4. 下載檔案 (特別針對 iOS 做了 MIME 改良，改為八位元串流，防止副檔名被強制覆寫成 .json)
+                const blob = new Blob([text], { type: "application/octet-stream" });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = "mocpogo_history_route.history";
+                a.download = fullFileName;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                showToast("檔案已成功以 .history 格式下載！", "success");
+                showToast(`檔案已成功下載，檔名：${fullFileName}`, "success");
             } catch (err) {
                 showToast("下載失敗，請直接點擊「複製 JSON」儲存文字。", "error");
             }
